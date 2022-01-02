@@ -1,0 +1,412 @@
+---
+title: "Titanic_Kaggle2"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r packages, message=FALSE, warning=FALSE, results="hide"}
+ipak <- function(pkg){
+    new.pkg <- pkg[!(pkg %in% installed.packages()[, "Package"])]
+    if (length(new.pkg)) 
+        install.packages(new.pkg, dependencies = TRUE)
+    sapply(pkg, require, character.only = TRUE)
+}
+
+packages <- c("caTools", "ROCR", "jpeg", "ggplot2", "dplyr", "caTools","mlr","h20")
+ipak(packages)
+library(data.table)
+```
+
+```{r}
+train <- read.csv("train.csv")
+test <- read.csv("test.csv")
+```
+
+#trying to translate this from Python
+#https://www.kaggle.com/showeed/starter-book-begginer-analysis?scriptVersionId=76354717
+
+#check dataframe infomation
+```{r}
+#train
+str(train)
+
+#test
+str(test)
+```
+
+#Unique values per column (train) (https://www.youtube.com/watch?v=kPExaSvx0Kg)
+```{r}
+count_unique <- rapply(train,
+                       function(x) length(unique(x)))
+
+
+count_unique
+```
+
+#Unique values per column (test)
+```{r}
+count_unique <- rapply(test,
+                       function(x) length(unique(x)))
+
+
+count_unique
+```
+
+#Now let's look at the traindata trends!
+```{r}
+counts <- table(train$Survived, train$Pclass)
+barplot(counts, main = "Survival by Class",
+        xlab = "Pclass", col = c("skyblue", "red"),
+        legend = rownames(counts), beside = TRUE)
+```
+
+```{r}
+counts <- table(train$Survived, train$Sex)
+barplot(counts, main = "Survival by Sex",
+        xlab = "Sex", col = c("skyblue", "red"),
+        legend = rownames(counts), beside = TRUE)
+```
+
+```{r}
+counts <- table(train$Survived, train$SibSp)
+barplot(counts, main = "Survival by SibSp",
+        xlab = "SibSp", col = c("skyblue", "red"),
+        legend = rownames(counts), beside = TRUE)
+```
+
+```{r}
+counts <- table(train$Survived, train$Parch)
+barplot(counts, main = "Survival by Parch",
+        xlab = "Parch", col = c("skyblue", "red"),
+        legend = rownames(counts), beside = TRUE)
+```
+
+```{r}
+counts <- table(train$Survived, train$Embarked)
+barplot(counts, main = "Survival by Embarked",
+        xlab = "Embarked", col = c("skyblue", "red"),
+        legend = rownames(counts), beside = TRUE)
+```
+
+```{r}
+ggplot(train, aes(x= Fare)) + geom_histogram(data = subset(train, train$Survived==0), fill = "red", alpha = 0.5) + geom_histogram(data = subset(train, train$Survived==1), fill = "green", alpha = 0.5) + 
+  guides(fill = guide_legend(title = "Title"),
+         colour = guide_legend(title = "Title"))
+```
+
+```{r}
+ggplot(train, aes(x= Age)) + geom_histogram(data = subset(train, train$Survived==0), fill = "red", alpha = 0.5) + geom_histogram(data = subset(train, train$Survived==1), fill = "green", alpha = 0.5)
+```
+
+Ticket + Cabin Combinations
+```{r}
+tmp_df = train[,c("Survived","Ticket")]
+tmp_df$target <- substr(tmp_df$Ticket, 1, 1)
+tmp_df2 <- tmp_df %>%
+  group_by(target, Survived) %>%
+  summarise(num = n()) %>%
+  spread(Survived, num)
+
+tmp_df2
+```
+
+Cabin Combinations
+```{r}
+tmp_df = train[,c("Survived","Cabin")]
+tmp_df$target <- substr(tmp_df$Cabin, 1, 1)
+tmp_df2 <- tmp_df %>%
+  group_by(target, Survived) %>%
+  summarise(num = n()) %>%
+  spread(Survived, num)
+
+tmp_df2
+```
+
+Pre-Processing
+```{r}
+ticket_preprocessing <- function(ticket) {
+  names <- names(ticket)
+  target_list <- unique(
+    for (x in names){
+      substr(x, 1, 1)
+      )
+    }
+  return_df = pd.DataFrame(index=ticket.index)
+  for (col in target_list){
+    return_df["T_"+col] = pd.Series(names).map(lambda x:1 if x[:1]==col else 0)
+  }
+  return(return_df)
+}
+
+ticket_preprocessing(train)
+```
+```{r}
+ticket_preprocessing <- function(ticket) {
+  names <- train$Ticket
+  names2 <- substr(names, 1, 1)
+  target_list <- unique(names2)
+  return_df = data.frame(index <-ticket.index)
+  return(return_df)
+  
+}
+ticket_preprocessing(train)
+```
+
+
+###Load datasets
+#In addition, set the PassengerId in the index so that we can determine whether it is training data or not later.
+```{r}
+train_data <- read.csv("train.csv")
+test_data <- read.csv("test.csv")
+train_data$Survived <- NULL
+
+data <- rbind(train_data, test_data)
+```
+
+##PreProcessing
+### NaN is filled with the average or the most frequent value, or unknown.
+```{r}
+#Fill blank cabins with NAs
+data$Cabin[data$Cabin==""] <- "Unknown"
+
+#Fill blank embarked with NAs
+data$Embarked[data$Embarked==""] <- "Unknown"
+
+#age
+data$Age[is.na(data$Age)] <- mean(data$Age, na.rm = TRUE)
+
+#fare
+data$Fare[is.na(data$Fare)] <- mean(data$Fare, na.rm = TRUE)
+
+#check for missing columns
+allmisscols <- sapply(data, function(x) all(is.na(x) | x == '' ))
+allmisscols
+```
+
+################ Approach 1 for pre-processing (did not use)
+Prepare variables to be made dummies for everything except age and fare
+```{r}
+data$Parch2 <- ifelse(data$Parch==0, "parch_alone", ifelse(data$Parch >= 1 & data$Parch <=4, "parch_small_family", "parch_large_family"))
+data$Parch <- NULL
+
+data$Name <- NULL
+
+#ticket
+data$Ticket2 <- paste("Ticket_",substr(data$Ticket, 1, 1))
+data$Ticket <- NULL
+
+#Cabin
+data$Cabin2 <- paste("Cabin_",substr(data$Cabin, 1, 1))
+data$Cabin <- NULL
+
+#Pclass
+data$Pclass2 <- paste("Pclass_",data$Pclass)
+data$Pclass <- NULL
+
+#Embarked
+data$Embarked2 <- paste("Embarked_", data$Embarked)
+data$Embarked <- NULL
+
+#Sex
+data$sex2 <- paste("Sex_",data$Sex)
+data$Sex <- NULL
+
+#S8bSp
+data$SibSp2 <- paste("SibSp_",data$SibSp)
+data$SibSp <- NULL
+```
+
+
+
+
+
+###########################Approach 2
+```{r}
+backup_data <- data
+
+data$Parch <- ifelse(data$Parch==0, "alone", ifelse(data$Parch >= 1 & data$Parch <=4, "small_family", "large_family"))
+
+data$Name <- NULL
+
+#ticket
+data$Ticket <- substr(data$Ticket, 1, 1)
+
+#Cabin
+data$Cabin <- substr(data$Cabin, 1, 1)
+
+#Pclass
+data$Pclass <- as.character(data$Pclass)
+
+
+#S8bSp
+data$SibSp <- as.character(data$SibSp)
+```
+
+
+#make dummies
+```{r}
+data2 <- fastDummies::dummy_cols(data)
+
+data2$Pclass <- NULL
+data2$Sex <- NULL
+data2$SibSp <- NULL
+data2$SibSp <- NULL
+data2$Parch <- NULL
+data2$Ticket <- NULL
+data2$Cabin <- NULL
+data2$Embarked <- NULL
+
+#data2 somehow still has empty values for cabin
+data2[is.na(data2)] = 0
+```
+
+#Get training and test data back
+```{r}
+train_processed <- subset(data2, data2$PassengerId %in% train_data$PassengerId)
+test_processed <- subset(data2, data2$PassengerId %in% test_data$PassengerId)
+
+train_tmp <- train %>%
+  select(1,2)
+
+train_processed2 <- merge(train_processed, train_tmp, on=c("PassengerId", "PassengerId"))
+
+set.seed(1005)
+sample = sample.split(train_processed2$Survived, SplitRatio = .75)
+x_train = subset(train_processed2, sample == TRUE)
+y_train  = subset(train_processed2, sample == FALSE)
+```
+
+#################################Approach1
+###Train model
+https://www.hackerearth.com/practice/machine-learning/machine-learning-algorithms/tutorial-random-forest-parameter-tuning-r/tutorial/
+###MLR package has its own function to convert data into a task, build learners, and optimize learning algorithms. 
+```{r}
+#create a task
+traintask <- makeClassifTask(data = x_train,target = "Survived") 
+testtask <- makeClassifTask(data = y_train,target = "Survived")
+
+#create learner
+bag <- makeLearner("classif.rpart",predict.type = "response")
+bag.lrn <- makeBaggingWrapper(learner = bag,bw.iters = 100,bw.replace = TRUE)
+```
+
+I've set up the bagging algorithm which will grow 100 trees on randomized samples of data with replacement. To check the performance, let's set up a validation strategy too:
+```{r}
+#set 5 fold cross validation
+rdesc <- makeResampleDesc("CV",iters=5L)
+```
+
+```{r}
+r <- resample(learner = bag.lrn , task = traintask, resampling = rdesc, measures = list(tpr,fpr,fnr,fpr,acc) ,show.info = T)
+```
+
+Being a binary classification problem, I've used the components of confusion matrix to check the model's accuracy. With 100 trees, bagging has returned an accuracy of 84.5%, which is way better than the baseline accuracy of 75%. Let's now check the performance of  random forest.
+```{r}
+#make randomForest learner
+rf.lrn <- makeLearner("classif.randomForest")
+rf.lrn$par.vals <- list(ntree = 100L, importance=TRUE)
+r <- resample(learner = rf.lrn, task = traintask, resampling = rdesc, measures = list(tpr,fpr,fnr,fpr,acc), show.info = T)
+```
+
+On this data set, random forest performs slightly better than bagging
+
+Internally, random forest uses a cutoff of 0.5; i.e., if a particular unseen observation has a probability higher than 0.5, it will be classified as <=50K. In random forest, we have the option to customize the internal cutoff. As the false positive rate is very high now, we'll increase the cutoff for positive classes (<=50K) and accordingly reduce it for negative classes (>=50K). Then, train the model again.
+```{r}
+#set cutoff
+rf.lrn$par.vals <- list(ntree = 100L, importance=TRUE, cutoff = c(0.62,0.38))
+r <- resample(learner = rf.lrn, task = traintask, resampling = rdesc, measures = list(tpr,fpr,fnr,fpr,acc), show.info = T)
+```
+
+As you can see, we've improved the accuracy of the random forest model by 2%, which is slightly higher than that for the bagging model. Now, let's try and make this model better.
+
+Parameter Tuning: Mainly, there are three parameters in the random forest algorithm which you should look at (for tuning):
+-ntree - As the name suggests, the number of trees to grow. Larger the tree, it will be more computationally expensive to build models.
+-mtry - It refers to how many variables we should select at a node split. Also as mentioned above, the default value is p/3 for regression and sqrt(p) for classification. We should always try to avoid using smaller values of mtry to avoid overfitting.
+-nodesize - It refers to how many observations we want in the terminal nodes. This parameter is directly related to tree depth. Higher the number, lower the tree depth. With lower tree depth, the tree might even fail to recognize useful signals from the data.
+Let get to the playground and try to improve our model's accuracy further. In MLR package, you can list all tuning parameters a model can support using:
+```{r}
+getParamSet(rf.lrn)
+
+#set parameter space
+params <- makeParamSet(makeIntegerParam("mtry",lower = 2,upper = 10),makeIntegerParam("nodesize",lower = 10,upper = 50))
+
+#set validation strategy
+rdesc <- makeResampleDesc("CV",iters=5L)
+
+#set optimization technique
+ctrl <- makeTuneControlRandom(maxit = 5L)
+
+#start tuning
+tune <- tuneParams(learner = rf.lrn, task = traintask, resampling = rdesc, measures = list(acc), par.set = params, control = ctrl, show.info = T)
+```
+
+#################################Approach 2
+https://www.analyticsvidhya.com/blog/2016/08/practicing-machine-learning-techniques-in-r-with-mlr-package/
+Random Forest is a powerful algorithm known to produce astonishing results. Actually, it’s prediction derive from an ensemble of trees. It averages the prediction given by each tree and produces a generalized result. From here, most of the steps would be similar to followed above, but this time I’ve done random search instead of grid search for parameter tuning, because it’s faster.
+```{r}
+trainTask <- makeClassifTask(data = train_processed2, target = "Survived")
+test_for_kaggle_submission <- test_processed
+test_for_kaggle_submission$Survived <- 0 #Giving it a fake column so I can make a task
+test_for_kaggle_submission$Survived <- as.integer(test_for_kaggle_submission$Survived)
+testTask <- makeClassifTask(data = test_for_kaggle_submission, target = "Survived")
+```
+
+```{r}
+getParamSet("classif.randomForest")
+#create a learner
+rf <- makeLearner("classif.randomForest", predict.type = "response", par.vals = list(ntree = 200, mtry = 3))
+rf$par.vals <- list(
+importance = TRUE
+)
+
+#set tunable parameters
+#grid search to find hyperparameters
+rf_param <- makeParamSet(
+makeIntegerParam("ntree",lower = 50, upper = 500),
+makeIntegerParam("mtry", lower = 3, upper = 10),
+makeIntegerParam("nodesize", lower = 10, upper = 50)
+)
+
+#let's do random search for 50 iterations
+rancontrol <- makeTuneControlRandom(maxit = 50L)
+```
+
+Though, random search is faster than grid search, but sometimes it turns out to be less efficient. In grid search, the algorithm tunes over every possible combination of parameters provided. In a random search, we specify the number of iterations and it randomly passes over the parameter combinations. In this process, it might miss out some important combination of parameters which could have returned maximum accuracy, who knows.
+```{r}
+#set 3 fold cross validation
+set_cv <- makeResampleDesc("CV",iters = 3L)
+
+#hypertuning
+rf_tune <- tuneParams(learner = rf, resampling = set_cv, task = trainTask, par.set = rf_param, control = rancontrol, measures = acc)
+```
+
+Now, we have the final parameters. Let’s check the list of parameters and CV accuracy.
+```{r}
+#cv accuracy
+rf_tune$y
+
+#best parameters
+rf_tune$x
+```
+
+Let’s build the random forest model now and check its accuracy.
+```{r}
+#using hyperparameters for modeling
+rf.tree <- setHyperPars(rf, par.vals = rf_tune$x)
+
+#train a model
+rforest <- train(rf.tree, trainTask)
+getLearnerModel(rforest)
+
+#make predictions
+rfmodel <- predict(rforest, testTask)
+```
+
+Fake dataframe to get predictions for kaggle submission
+```{r}
+kaggle_submission <- data.frame(rfmodel$data)
+write.csv(kaggle_submission, "kaggle_submission.csv")
+```
