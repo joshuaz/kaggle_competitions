@@ -38,5 +38,5 @@ In this competition, you will predict sales for the thousands of product familie
 - A magnitude 7.8 earthquake struck Ecuador on April 16, 2016. People rallied in relief efforts donating water and other first need products which greatly affected supermarket sales for several weeks after the earthquake.
 
 
-### Evaluation
+## Evaluation
 The evaluation metric for this competition is Root Mean Squared Logarithmic Error
