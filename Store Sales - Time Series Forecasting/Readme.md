@@ -40,3 +40,6 @@ In this competition, you will predict sales for the thousands of product familie
 
 ## Evaluation
 The evaluation metric for this competition is Root Mean Squared Logarithmic Error
+
+## Results
+my submission was 116th out of 653 submissions at the time of submission
