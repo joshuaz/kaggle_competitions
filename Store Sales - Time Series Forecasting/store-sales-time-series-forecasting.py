@@ -219,3 +219,15 @@ for (store_nbr, family), group_data in grouped_train:
 
 # Now, forecast_results dictionary contains the forecasted sales for each 'store_nbr' and 'family' combination
 # Access the results using forecast_results[(store_nbr, family)]
+
+
+# Combine all DataFrames into a single DataFrame
+combined_df = pd.concat(forecast_results.values(), keys=forecast_results.keys())
+
+# Reset the index to make it more readable (optional)
+combined_df.reset_index(inplace=True)
+
+#create submission file
+submission = combined_df[['id', 'sales_forecast']]
+submission = submission.rename({'sales_forecast': 'sales'}, axis=1)
+submission.to_csv('submission.csv', index = False)
