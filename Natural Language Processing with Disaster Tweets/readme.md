@@ -23,3 +23,6 @@ You'll need `train.csv`, `test.csv` and `sample_submission.csv`.
 
 ### What am I predicting?
 You are predicting whether a given tweet is about a real disaster or not. If so, predict a `1`. If not, predict a `0`.
+
+## Results
+At the time of submissions (Nov 29, 2023), my results placed me at 446 out of 1117
